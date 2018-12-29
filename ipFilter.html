@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>IP区域过滤</title>
+	<style type="text/css">
+		#container{
+			display: flex;
+			height: 500px;
+		}
+		.flex-div textarea{
+			min-width: 300px;
+			height: 100%;
+            margin-left: 20px;
+            overflow: auto;
+		}
+        .flex-div div{
+            margin: 10px 0 10px 20px;
+        }
+        #btn{
+            background-color: #1991FF;
+            width: 100px;
+            border: none;
+            color: white;
+            /* padding: 15px 32px; */
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+        }
+        #btn:hover{
+            cursor: pointer;
+            background-color: blue;
+        }
+	</style>
+</head>
+<body>
+	<div id='container'>
+		<div class='flex-div'>
+			<div>完整IP段</div>
+            <textarea id='all' placeholder="完整IP段示例
+10.1.1.1-10.100.255.255
+10.200.1.1-255.255
+
+支持格式说明：
+· 单个ip：10.1.1.1
+· ip段：10.1.1.1-1.10，
+· 不同ip段用换行隔开
+· 忽略空格
+"></textarea>
+		</div>
+		<div class='flex-div'>
+			<div>剔除掉的IP段</div>
+            <textarea id='delete' placeholder="剔除掉的IP段示例
+10.1.50.1-10.50.255.255
+10.100.1.1
+"></textarea>
+        </div>
+        <div class='flex-div'>
+            <div><span id='btn'>计算结果</span></div>
+            <textarea id='result' placeholder="计算结果示例
+10.1.1.1-10.1.50.0
+10.51.0.0-10.100.1.0
+10.100.1.2-10.100.255.255
+10.200.1.1-10.200.255.255"></textarea>
+        </div>
+	</div>
+
+	<script type="text/javascript">
+		/**
+ * ip范围格式化
+ * 1、10.130.134.225-10.130.134.254
+ * 2、10.130.134.225-254，
+ * 输入ip格式，返回ip格式
+ */
+function ipFormat(ipSection, separator='-'){
+    var _ipSection = ipSection.trim();
+    var ipPre = _ipSection.split(separator)[0];
+    var ipEnd = _ipSection.split(separator)[1];
+    var preList = ipPre.split('.');
+    var endList = ipEnd ? ipEnd.split('.') : preList;
+    var diff = preList.length - endList.length;
+    if(diff === 0){
+        return preList.join('.') + '-' + endList.join('.')
+    }else{
+        for(var i = 0; i < diff; i++){
+            endList.unshift(preList[diff - i - 1])
+        }
+        return preList.join('.') + '-' + endList.join('.')
+    }
+}
+function ipListFormat(ipList, separator='-'){
+    var result = [];
+    for(var i = 0; i < ipList.length; i++){
+        result.push(ipFormat(ipList[i],separator));
+    }
+    return result;
+}
+
+/**
+ * ip范围转数字范围
+ * 输入ip格式，返回数字格式
+ */
+function ip2num(ipSection){
+    var preList = ipSection.split('-')[0].split('.');
+    var endList = ipSection.split('-')[1].split('.');
+    var preNum = parseInt(preList[0])*256*256*256 + parseInt(preList[1])*256*256 + parseInt(preList[2])*256 + parseInt(preList[3]);
+    var endNum = parseInt(endList[0]*256*256*256) + parseInt(endList[1]*256*256) + parseInt(endList[2]*256) + parseInt(endList[3]);
+    var temp;
+    if(preNum > endNum){
+        temp = preNum;
+        preNum = endNum;
+        endNum = temp;
+    }
+    return preNum + '-' + endNum;
+}
+function ipList2numList(ipList){
+    var result = [];
+    for(var i = 0; i < ipList.length; i++){
+        result.push(ip2num(ipList[i]));
+    }
+    return result;
+}
+
+/**
+ * 数字转ip范围
+ * 输入数字格式，返回ip格式
+ */
+function num2ip(numSection){
+    var preNum =  parseInt(numSection.split('-')[0]);
+    var endNum = parseInt(numSection.split('-')[1]);
+   
+    var ipPre0 = parseInt(preNum / (256*256*256));
+    var pre0 =  preNum % (256*256*256);
+    var ipPre1 = parseInt(pre0 / (256*256));
+    var pre1 =  pre0 % (256*256);
+    var ipPre2 = parseInt(pre1 / (256));
+    var ipPre3 =  pre1 % (256);
+
+    var ipEnd0 = parseInt(endNum / (256*256*256));
+    var end =  endNum % (256*256*256);
+    var ipEnd1 = parseInt(end / (256*256));
+    var end1 =  end % (256*256);
+    var ipEnd2 = parseInt(end1 / (256));
+    var ipEnd3 =  end1 % (256);
+
+    return ipPre0 + '.' + ipPre1 + '.' + ipPre2 + '.' + ipPre3 + '-' + ipEnd0 + '.' + ipEnd1 + '.' +  ipEnd2 + '.' + ipEnd3;
+}
+function numList2ipList(numList){
+    var result = [];
+    for(var i = 0; i < numList.length; i++){
+        result.push(num2ip(numList[i]));
+    }
+    return result;
+}
+
+/**
+ * 两个ip数字范围求差集
+ * 输入数字格式，返回数字格式list
+ */
+function getIpRange(sourceIp, takeoutIp){
+    var sourceIpList = sourceIp.split('-');
+    var takeoutIpList = takeoutIp.split('-');
+    var t0 = parseInt(takeoutIpList[0]);
+    var t1 = parseInt(takeoutIpList[1]);
+    var s0 = parseInt(sourceIpList[0]);
+    var s1 = parseInt(sourceIpList[1]);
+    if(t0 > s1 || t1 < s0){
+        return [sourceIp]
+    }
+    if(t0 <= s0 && t1 < s1){
+        return [(t1 + 1) + '-' + s1];
+    }else if(t0 > s0 && t1 < s1){
+        return [s0 + '-' + (t0 - 1), (t1 + 1) + '-' + s1];
+    }else if(t0 > s0 && t1 >= s1){
+        return [s0 + '-' + (t0 - 1)];
+    }else{
+        return [];
+    }
+}
+function moreSource(sList, takeoutIp){
+    var result = [];
+    for(var i = 0; i < sList.length; i++){
+        var temp = getIpRange(sList[i], takeoutIp);
+        result = [...result, ...temp];
+    }
+    return result;
+}
+
+/**
+* 对1-100这样的数组元素排序,合并如1.1.1.1-1.1.1.1合并为1.1.1.1
+*/
+function orderNumList(numList){
+	numList.sort(function(a,b){
+		var a0 = (a.indexOf('-') > -1) ? a.split('-')[0] : a;
+		var b0 = (b.indexOf('-') > -1) ? b.split('-')[0] : b;
+		return a0 - b0;
+	})
+	return numList;
+}
+function distNumList(numList){
+	var result = [];
+	for(var i = 0; i < numList.length; i++){
+		var a = numList[i];
+		var a0 = (a.indexOf('-') > -1) ? a.split('-')[0] : a;
+		var a1 = (a.indexOf('-') > -1) ? a.split('-')[1] : a;
+		if(a0 == a1){
+			result.push(a0)
+		}else{
+			result.push(a);
+		}
+	}
+	return result;
+}
+
+/**
+ * run
+ * sourceList: 原来的范围集合[1.1.1.1-2.2.2.2, 1.1.1.1-3.3.3.3]
+ * takeList：切割的集合[1.1.1.1-2.2.2.2, 1.1.1.1-3.3.3.3]
+ * 1、ip格式化；2、ip转数字；3、切割获取数字结果；4、对数字结果排序和去重；5、对数字结果转ip；6、返回最终ip
+ */
+function getDiff(sipList, tipList){
+	var sipFormat = ipListFormat(sipList);
+	var tipFormat = ipListFormat(tipList);
+	var sipNum = ipList2numList(sipFormat);
+	var tipNum = ipList2numList(tipFormat);
+	var result = sipNum;
+    for(var i = 0; i < tipNum.length; i++){
+        result = moreSource(result, tipNum[i]);
+    }
+    result = orderNumList(result);
+    result = numList2ipList(result);
+    result = distNumList(result);
+    return result
+}
+
+/**
+* 输入的值转数组
+* 去掉两边空格，去掉空格行
+*/
+function value2list(value){
+	var result = [];
+	var temp = value.split('\n');
+	for(var i = 0; i < temp.length; i++){
+		if(temp[i]){
+			result.push(temp[i].trim())
+		}
+	}
+	return result;
+}
+
+//点击事件
+var btn = document.getElementById('btn');
+btn.addEventListener('click', function(){
+    //获取文本框的值，转为数组
+	var resultElem = document.getElementById('result');	
+	var allValue = document.getElementById('all').value;
+	var deleteValue = document.getElementById('delete').value;
+    var allValueList = value2list(allValue);
+	var deleteValueList = value2list(deleteValue);
+	// console.log(allValueList,deleteValueList,'已转')
+
+	var deff = getDiff(allValueList, deleteValueList);
+    var output = deff.join('\n');
+	resultElem.innerHTML = output;
+}, false)
+
+	</script>
+</body>
+</html>
